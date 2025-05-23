@@ -1,46 +1,10 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
-#include "hardware/dma.h"
 #include "hardware/pio.h"
 #include "buffer_queue.h"
+#include "dma_reader.h"
 #include "i2s.h"
-
-static BufferQueue buffers(4, 1024);
-
-static uint8_t dma_channel = 0;
-
-static void __isr dma_handler()
-{
-    static uint8_t current_buffer = 0;
-
-    if (dma_channel_get_irq0_status(dma_channel))
-    {
-        dma_channel_acknowledge_irq0(dma_channel);
-
-        volatile uint32_t *buffer = buffers.getWriteBuffer();
-        dma_channel_set_write_addr(dma_channel, buffer, false);
-        dma_channel_set_trans_count(dma_channel, buffers.buffer_size, true);
-    }
-}
-
-static void setup_rx_dma(PIO pio, uint8_t sm)
-{
-    dma_channel = dma_claim_unused_channel(true);
-
-    dma_channel_config config = dma_channel_get_default_config(dma_channel);
-    channel_config_set_transfer_data_size(&config, DMA_SIZE_32);
-    channel_config_set_read_increment(&config, false);
-    channel_config_set_write_increment(&config, true);
-    channel_config_set_dreq(&config, pio_get_dreq(pio, sm, false));
-    dma_channel_configure(dma_channel, &config, buffers.getWriteBuffer(), &pio->rxf[sm], buffers.buffer_size, false);
-
-    dma_channel_set_irq0_enabled(dma_channel, true);
-    irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
-    irq_set_enabled(DMA_IRQ_0, true);
-
-    dma_channel_start(dma_channel);
-}
 
 int main()
 {
@@ -65,7 +29,8 @@ int main()
     I2SMasterClock clock(pio, pio_claim_unused_sm(pio, true), SCK_PIN, sample_freq, 256);
     I2SMasterInput input(pio, pio_claim_unused_sm(pio, true), BCK_PIN, DIN_PIN, sample_freq, 32);
 
-    setup_rx_dma(pio, input.sm);
+    BufferQueue buffer_queue(4, 1024);
+    DMAReader dma_reader(pio, input.sm, buffer_queue);
 
     clock.enable();
     input.enable();
@@ -79,8 +44,7 @@ int main()
 
     while (true)
     {
-
-        const volatile uint32_t *const buffer = buffers.getReadBuffer();
+        const volatile uint32_t *const buffer = buffer_queue.getReadBuffer();
         if (buffer != nullptr)
         {
             for (int i = 0; i < 8; i++)

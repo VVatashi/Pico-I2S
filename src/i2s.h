@@ -1,3 +1,5 @@
+#pragma once
+
 class I2SMasterClock
 {
 public:

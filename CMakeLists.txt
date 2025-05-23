@@ -46,7 +46,7 @@ pico_enable_stdio_usb(pico_i2s 0)
 
 pico_generate_pio_header(pico_i2s ${CMAKE_CURRENT_LIST_DIR}/src/i2s.pio)
 
-target_sources(pico_i2s PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/main.cpp ${CMAKE_CURRENT_LIST_DIR}/src/buffer_queue.cpp ${CMAKE_CURRENT_LIST_DIR}/src/i2s.cpp)
+target_sources(pico_i2s PRIVATE ${CMAKE_CURRENT_LIST_DIR}/src/main.cpp ${CMAKE_CURRENT_LIST_DIR}/src/buffer_queue.cpp ${CMAKE_CURRENT_LIST_DIR}/src/dma_reader.cpp ${CMAKE_CURRENT_LIST_DIR}/src/i2s.cpp)
 
 # Add the standard library to the build
 target_link_libraries(pico_i2s pico_stdlib hardware_pio hardware_dma)

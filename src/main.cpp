@@ -3,15 +3,10 @@
 #include "hardware/clocks.h"
 #include "hardware/dma.h"
 #include "hardware/pio.h"
+#include "buffer_queue.h"
 #include "i2s.h"
 
-static const uint16_t rx_buffer_size = 8192;
-
-alignas(4) static uint32_t rx_buffer_0[rx_buffer_size];
-alignas(4) static uint32_t rx_buffer_1[rx_buffer_size];
-
-static volatile bool rx_buffer_0_ready = false;
-static volatile bool rx_buffer_1_ready = false;
+static BufferQueue buffers(4, 1024);
 
 static uint8_t dma_channel = 0;
 
@@ -23,20 +18,9 @@ static void __isr dma_handler()
     {
         dma_channel_acknowledge_irq0(dma_channel);
 
-        if (current_buffer == 0)
-        {
-            current_buffer = 1;
-            rx_buffer_0_ready = true;
-            dma_channel_set_write_addr(dma_channel, rx_buffer_1, false);
-        }
-        else
-        {
-            current_buffer = 0;
-            rx_buffer_1_ready = true;
-            dma_channel_set_write_addr(dma_channel, rx_buffer_0, false);
-        }
-
-        dma_channel_set_trans_count(dma_channel, rx_buffer_size, true);
+        volatile uint32_t *buffer = buffers.getWriteBuffer();
+        dma_channel_set_write_addr(dma_channel, buffer, false);
+        dma_channel_set_trans_count(dma_channel, buffers.buffer_size, true);
     }
 }
 
@@ -49,7 +33,7 @@ static void setup_rx_dma(PIO pio, uint8_t sm)
     channel_config_set_read_increment(&config, false);
     channel_config_set_write_increment(&config, true);
     channel_config_set_dreq(&config, pio_get_dreq(pio, sm, false));
-    dma_channel_configure(dma_channel, &config, rx_buffer_0, &pio->rxf[sm], rx_buffer_size, false);
+    dma_channel_configure(dma_channel, &config, buffers.getWriteBuffer(), &pio->rxf[sm], buffers.buffer_size, false);
 
     dma_channel_set_irq0_enabled(dma_channel, true);
     irq_set_exclusive_handler(DMA_IRQ_0, dma_handler);
@@ -86,15 +70,22 @@ int main()
     clock.enable();
     input.enable();
 
+    const uint8_t LED_PIN = 25;
+
+    uint64_t previous_time = to_ms_since_boot(get_absolute_time());
+
+    gpio_init(LED_PIN);
+    gpio_set_dir(LED_PIN, GPIO_OUT);
+
     while (true)
     {
-        if (rx_buffer_0_ready)
-        {
-            rx_buffer_0_ready = false;
 
+        const volatile uint32_t *const buffer = buffers.getReadBuffer();
+        if (buffer != nullptr)
+        {
             for (int i = 0; i < 8; i++)
             {
-                uint32_t sample = (rx_buffer_0[i]) << 1;
+                uint32_t sample = (buffer[i]) << 1;
                 int32_t signed_sample = ((int32_t)sample) >> 8;
                 printf("%08X ", signed_sample);
             }
@@ -102,18 +93,12 @@ int main()
             printf("\n");
         }
 
-        if (rx_buffer_1_ready)
+        uint64_t current_time = to_ms_since_boot(get_absolute_time());
+
+        if (current_time - previous_time > 500)
         {
-            rx_buffer_1_ready = false;
-
-            for (int i = 0; i < 8; i++)
-            {
-                uint32_t sample = (rx_buffer_1[i]) << 1;
-                int32_t signed_sample = ((int32_t)sample) >> 8;
-                printf("%08X ", signed_sample);
-            }
-
-            printf("\n");
+            gpio_xor_mask(1u << LED_PIN);
+            previous_time = current_time;
         }
     }
 }

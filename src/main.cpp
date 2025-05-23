@@ -24,12 +24,12 @@ int main()
     const uint8_t LRCK_PIN = 18;
     const uint8_t DIN_PIN = 19;
 
-    const uint32_t sample_freq = 8000;
+    const uint32_t sample_freq = 48000;
 
     I2SMasterClock clock(pio, pio_claim_unused_sm(pio, true), SCK_PIN, sample_freq, 256);
     I2SMasterInput input(pio, pio_claim_unused_sm(pio, true), BCK_PIN, DIN_PIN, sample_freq, 32);
 
-    BufferQueue buffer_queue(4, 1024);
+    BufferQueue buffer_queue(4, 2048);
     DMAReader dma_reader(pio, input.sm, buffer_queue);
 
     clock.enable();

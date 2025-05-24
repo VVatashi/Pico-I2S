@@ -4,7 +4,8 @@
 #include "hardware/pio.h"
 #include "buffer_queue.h"
 #include "dma_reader.h"
-#include "i2s.h"
+#include "i2s_master_clock.h"
+#include "i2s_master_input.h"
 
 int main()
 {
